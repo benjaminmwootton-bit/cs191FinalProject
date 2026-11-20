@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Snake vs. Hunter</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fff;--text:#222;--grid:#ece7dc;--me:#2e9e5b;--meh:#1b6e3d;--foe:#d64545;--foeh:#8f1f1f;--fg:#3b7dd8;--fgh:#1d4f9e;--food:#e0a21a;--btn:#e4dfd2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171a;--card:#1e2126;--text:#e8e8e8;--grid:#262a30;--me:#4cc77f;--meh:#8ff0b3;--foe:#e8605f;--foeh:#ffb0ae;--fg:#5aa0f2;--fgh:#a8d0ff;--food:#f2b83a;--btn:#2c3037;color-scheme:dark}}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;box-sizing:border-box;overflow-x:hidden}
+h1{font-size:20px;margin:0}
+.bar{display:flex;gap:18px;font-size:14px}
+.wrap{position:relative;width:min(92vw,600px)}
+canvas{width:100%;height:auto;display:block;background:var(--card);border-radius:10px;touch-action:none}
+#msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(0,0,0,.45);color:#fff;border-radius:10px;text-align:center;padding:16px}
+#msg b{font-size:24px}
+button{font:inherit;border:0;border-radius:8px;background:var(--btn);color:var(--text);padding:10px 16px;cursor:pointer}
+#go{background:var(--me);color:#fff;font-weight:600}
+.pad{display:grid;grid-template-columns:repeat(3,56px);gap:6px}
+.pad button{height:48px;font-size:20px;padding:0}
+.hint{font-size:12px;opacity:.7;text-align:center}
+</style>
+</head>
+<body>
+<h1>Snake vs. Hunter</h1>
+<div class="bar"><span>Score: <b id="sc">0</b></span><span>Best: <b id="hi">0</b></span><span>Rival ate: <b id="st">0</b></span></div>
+<div class="wrap">
+<canvas id="c" width="480" height="480"></canvas>
+<div id="msg"><b>Don’t get caught</b><span>Eat the gold food. The red snake hunts you — touching it is fatal. The slow blue snake is harmless, but it races you for the food.</span><button id="go">Start</button></div>
+</div>
+<div class="pad">
+<span></span><button data-d="u">▲</button><span></span>
+<button data-d="l">◀</button><button data-d="d">▼</button><button data-d="r">▶</button>
+</div>
+<div class="hint">Arrow keys / WASD / swipe · Space to restart</div>
+<script>
+const N=30,C=20,cv=document.getElementById('c'),ctx=cv.getContext('2d');cv.width=cv.height=N*C;
+const $=id=>document.getElementById(id);
+let p,pd,q,e,ed,f,fd,stolen=0,food,score,tick,alive=false,timer,best=0;
+const V={u:[0,-1],d:[0,1],l:[-1,0],r:[1,0]};
+const col=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const has=(a,x,y)=>a.some(s=>s.x===x&&s.y===y);
+function spawnFood(){do{food={x:Math.random()*N|0,y:Math.random()*N|0}}while(has(p,food.x,food.y)||has(e,food.x,food.y)||has(f,food.x,food.y))}
+function spawnEnemy(){
+  const far=p[0].x<N/2?N-3:2;
+  e=[];for(let i=0;i<5;i++)e.push({x:far,y:2+i});ed=[0,1];
+}
+function start(){
+  p=[{x:5,y:12},{x:4,y:12},{x:3,y:12}];pd=[1,0];q=[];
+  score=0;tick=0;stolen=0;alive=true;$('sc').textContent=0;$('st').textContent=0;
+  spawnEnemy();spawnForager();spawnFood();$('msg').style.display='none';
+  clearInterval(timer);timer=setInterval(step,115);draw();
+}
+function spawnForager(){
+  const sx=p[0].x<N/2?N-4:3;f=[];
+  for(let i=0;i<3;i++)f.push({x:sx>N/2?sx+i:sx-i,y:N-3});
+  fd=sx>N/2?[-1,0]:[1,0];
+}
+function stepForager(){
+  const h=f[0];let pick=null;
+  for(const k in V){
+    const d=V[k];if(d[0]===-fd[0]&&d[1]===-fd[1])continue;
+    const x=h.x+d[0],y=h.y+d[1];
+    if(x<0||y<0||x>=N||y>=N||has(f,x,y))continue;
+    const s=Math.abs(x-food.x)+Math.abs(y-food.y)+Math.random()*0.5;
+    if(!pick||s<pick.s)pick={d,s};
+  }
+  if(!pick){spawnForager();return}
+  fd=pick.d;f.unshift({x:h.x+fd[0],y:h.y+fd[1]});
+  if(f[0].x===food.x&&f[0].y===food.y){
+    stolen++;$('st').textContent=stolen;spawnFood();
+    if(f.length>14)f.pop(); // grows when it eats, up to a cap
+  }else f.pop();
+}
+function die(){
+  alive=false;clearInterval(timer);
+  best=Math.max(best,score);$('hi').textContent=best;
+  $('msg').innerHTML='<b>Caught!</b><span>Score: '+score+'</span><button id="go">Play again</button>';
+  $('msg').style.display='flex';$('go').onclick=start;
+}
+function stepEnemy(){
+  const h=e[0],t=p[0];let opts=[];
+  for(const k in V){
+    const d=V[k];if(d[0]===-ed[0]&&d[1]===-ed[1])continue;
+    const x=h.x+d[0],y=h.y+d[1];
+    if(x<0||y<0||x>=N||y>=N||has(e,x,y))continue;
+    // slightly avoid running into the player's body (head is the target)
+    const pen=has(p.slice(1),x,y)?6:0;
+    opts.push({d,s:Math.abs(x-t.x)+Math.abs(y-t.y)+pen+Math.random()*0.8});
+  }
+  if(!opts.length){spawnEnemy();return}
+  opts.sort((a,b)=>a.s-b.s);
+  let pick=Math.random()<0.06?opts[Math.random()*opts.length|0]:opts[0];
+  ed=pick.d;e.unshift({x:h.x+ed[0],y:h.y+ed[1]});
+  if(tick%35!==0||e.length>16)e.pop();
+}
+function step(){
+  tick++;
+  if(q.length){const d=q.shift();if(!(d[0]===-pd[0]&&d[1]===-pd[1]))pd=d}
+  const nh={x:p[0].x+pd[0],y:p[0].y+pd[1]};
+  if(nh.x<0||nh.y<0||nh.x>=N||nh.y>=N||has(p,nh.x,nh.y))return die();
+  p.unshift(nh);
+  if(nh.x===food.x&&nh.y===food.y){score+=10;$('sc').textContent=score;spawnFood()}else p.pop();
+  if(tick%5!==0)stepEnemy(); // hunter is a bit slower than you
+  if(tick%2===0)stepForager(); // forager moves every other tick
+  if(has(e,p[0].x,p[0].y)||has(p,e[0].x,e[0].y))return die();
+  draw();
+}
+function draw(){
+  ctx.fillStyle=col('--card');ctx.fillRect(0,0,N*C,N*C);
+  ctx.fillStyle=col('--grid');
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++)if((i+j)%2)ctx.fillRect(i*C,j*C,C,C);
+  ctx.fillStyle=col('--food');ctx.beginPath();ctx.arc(food.x*C+C/2,food.y*C+C/2,C/2-3,0,7);ctx.fill();
+  const snake=(a,c,h)=>a.forEach((s,i)=>{ctx.fillStyle=i?c:h;ctx.fillRect(s.x*C+1,s.y*C+1,C-2,C-2)});
+  snake(f,col('--fg'),col('--fgh'));
+  snake(e,col('--foe'),col('--foeh'));
+  snake(p,col('--me'),col('--meh'));
+}
+function turn(k){
+  if(!alive){return}
+  const d=V[k];const last=q.length?q[q.length-1]:pd;
+  if(q.length<3&&!(d[0]===-last[0]&&d[1]===-last[1])&&!(d[0]===last[0]&&d[1]===last[1]))q.push(d);
+}
+const keys={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r',w:'u',s:'d',a:'l',d:'r'};
+addEventListener('keydown',ev=>{
+  if(ev.key===' '||(ev.key==='Enter'&&!alive)){ev.preventDefault();start();return}
+  const k=keys[ev.key];if(k){ev.preventDefault();turn(k)}
+});
+document.querySelectorAll('.pad button').forEach(b=>b.onclick=()=>turn(b.dataset.d));
+let sx,sy;
+cv.addEventListener('touchstart',ev=>{sx=ev.touches[0].clientX;sy=ev.touches[0].clientY},{passive:true});
+cv.addEventListener('touchend',ev=>{
+  const dx=ev.changedTouches[0].clientX-sx,dy=ev.changedTouches[0].clientY-sy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;
+  turn(Math.abs(dx)>Math.abs(dy)?(dx>0?'r':'l'):(dy>0?'d':'u'));
+});
+$('go').onclick=start;
+</script>
+</body>
+</html>
